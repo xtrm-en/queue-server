@@ -10,11 +10,14 @@ import net.minestom.server.entity.PlayerSkin
 import net.minestom.server.event.GlobalEventHandler
 import net.minestom.server.event.player.*
 import net.minestom.server.event.trait.CancellableEvent
+import net.minestom.server.gamedata.tags.Tag
+import net.minestom.server.gamedata.tags.Tag.BasicType
+import net.minestom.server.gamedata.tags.TagManager
 import net.minestom.server.instance.InstanceContainer
 import net.minestom.server.instance.InstanceManager
-import net.minestom.server.network.packet.server.play.SoundEffectPacket
 import net.minestom.server.utils.NamespaceID
 import net.minestom.server.world.DimensionType
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.reflect.KClass
 
 /**
@@ -54,6 +57,48 @@ object QueueServer {
         logger.info("Starting QueueServer on ${config.address}:${config.port}")
         val spawnPoint = point(8, 48, 8)
 
+        val tagsSplice = config.missingTagsStr.substring(1, config.missingTagsStr.length - 1)
+            .split("[")
+            .flatMap { it.split("]") }
+            .flatMap { it.split(",") }
+            .filter { it.isNotBlank() }
+            .map { it.trim() }
+        val overrideTags = buildMap<String, List<String>> {
+            var currentList = mutableListOf<String>()
+            var currentTagKey: String? = null
+            tagsSplice.forEach { tagValue ->
+                if (tagValue.endsWith("=")) {
+                    if (currentTagKey != null) {
+                        put(currentTagKey!!, currentList)
+                    }
+                    currentTagKey = tagValue.substringBeforeLast("=")
+                    currentList = mutableListOf()
+                } else {
+                    currentList.add(tagValue)
+                }
+            }
+            if (currentTagKey != null) {
+                put(currentTagKey!!, currentList)
+            }
+        }
+
+        TagManager::class.java.getDeclaredField("tagMap").apply {
+            isAccessible = true
+            @Suppress("UNCHECKED_CAST")
+            val tagMap = get(MinecraftServer.getTagManager()) as ConcurrentHashMap<BasicType, MutableList<Tag>>
+            tagMap.forEach { (key, value) ->
+                val toAdd = overrideTags[key.identifier] ?: return@forEach
+                value.addAll(
+                    toAdd.map {
+//                        if (it == "supplementaries:throwable_bricks")
+//                            Tag(NamespaceID.from(it), setOf(NamespaceID.from("minecraft:bricks")))
+//                        else
+                            Tag(NamespaceID.from(it))
+                    }
+                )
+            }
+        }
+
         events.addListener(PlayerLoginEvent::class.java) {
             it.setSpawningInstance(instanceManager.createSharedInstance(mainInstance))
             it.player.respawnPoint = spawnPoint
@@ -68,13 +113,17 @@ object QueueServer {
         }
         events.addListener(PlayerMoveEvent::class.java) {
             if (it.player.position.asVec() == it.newPosition.asVec()) return@addListener
-            it.player.teleport(it.player.position)
+            it.player.teleport(spawnPoint.withView(it.player.position))
         }
-        events.addListener(PlayerPacketOutEvent::class.java) {
-            if (it.packet is SoundEffectPacket) {
-                it.isCancelled = true
-            }
-        }
+//        events.addListener(PlayerPacketOutEvent::class.java) { event ->
+//            println("OUT> " + event.packet.javaClass.simpleName)
+//            if (event.packet is SoundEffectPacket) {
+//                event.isCancelled = true
+//            }
+//        }
+//        events.addListener(PlayerPacketEvent::class.java) {
+//            println("IN> " + it.packet.javaClass.simpleName)
+//        }
         events.silenceEvents(
             PlayerChatEvent::class,
             PlayerCommandEvent::class,

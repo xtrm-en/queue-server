@@ -18,6 +18,7 @@ data class Configuration(
     val port: Int = 1337,
     val maxPlayers: Int = 1000,
     val motd: String = "Queue Server",
+    val missingTagsStr: String = "{}",
 ) {
     companion object {
         fun from(path: Path): Configuration =
