@@ -34,9 +34,9 @@ object QueueServer {
         .ceilingEnabled(false)
         .fixedTime(null)
         .ambientLight(0.0f)
-        .height(384)
-        .minY(-64)
-        .logicalHeight(384)
+        .height(255)
+        .minY(0)
+        .logicalHeight(255)
         .infiniburn(NamespaceID.from("minecraft:infiniburn_overworld"))
         .effects("minecraft:the_end")
         .build().also {
